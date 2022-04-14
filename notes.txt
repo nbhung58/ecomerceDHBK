@@ -1,0 +1,371 @@
+II. TẠO BIẾT MÔI TRƯỜNG, KHAI BÁO MODDULE
+1. Create library folder to contain code
+2. Create __init__.py
+
+3. coding __init__.py
+from flask import Flask, request, Blueprint
+
+def create_app():
+    app = Flask(__name__)
+    return app
+4. coding app.py
+from library import create_app
+
+if __name__ == "__main__":
+    app=create_app()
+    app.run(debug=True)
+
+5. Tạo file .env và khai báo các môi trường 
+KEY = "library_api"
+DATABASE_URL = 'sqlite:///library.db'
+
+6. Tạo file config.py
+import os
+SECRET_KEY = os.environ.get("KEY")
+SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
+#Nó không hiện thông báo khi làm việc với SQLALCHEMY
+SQLALCHEMY_TRACK_MODIFICATIONS = False
+
+7. File __init__ làm sao load được cái file config.py
+Bổ sung
+#__init__.py
+def create_app(config_file="config.py"):
+    app = Flask(__name__)
+    app.config.from_pyfile(config_file)
+
+cài pip install python-dotenv
+#config.py
+from dotenv import load_dotenv
+
+load_dotenv()
+
+test pythonn app.py
+
+8. Tạo các folder theo cơ sở dữ liệu
+8.1 books -> controller.py, services.py
+8.2 borrows -> controller.py, services.py
+8.3 author -> controller.py, services.py
+8.4 category_author -> controller.py, services.py
+
+code in books/controller.py
+from flask import Blueprint
+
+books = Blueprint("books", __name__)
+@books.route("/get-all-books")
+def get_all_books():
+    return "All books"
+
+test on browser: http://127.0.0.1:5000/get-all-books
+
+III. THIẾT KẾ DATABASE
+1. Tạo thêm 1 file extension.py and code
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+
+2. Tạo thêm 1 file model.py and code
+Thiết lập database dựa theo mô hình database
+from .extension import db
+class Student(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    name = db.Column(db.String(100), nullable = False)
+    birth_date = db.Column(db.Date)
+    gender = db.Column(db.String(10))
+    class_name = db.Column(db.String(10))
+
+    def __init__(self, name, birth_date, gender, class_name):
+        self.name = name
+        self.birth_date = birth_date
+        self.gender = gender
+        self.class_name = class_name
+
+class Books(db.Model):
+    id = db.Column(db.Interger, primary_key = True)
+    name = db.Column(db.String(100), nullable = False )
+    page_count = db.Column(db.Integer)
+    author_id = db.Column(db.String(10))
+    category_id = db.Column(db.String(10))
+
+    def __init__(self, name, page_count, author_id, category_id):
+        self.name = name
+        self.page_count = page_count
+        self.author_id = author_id
+        self.category_id = category_id
+
+class Borrow(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    book_id = db.Column(db.Integer, db.ForeignKey('books.id') )
+    student_id = db.Column(db.Integer, db.ForeignKey('student.id'))
+    borrow_date = db.Column(db.Date)
+    return_date = db.Column(db.Date)
+
+    def __init__(self, book_id, student_id, borrow_date,return_date):
+        self.book_id = book_id
+        self.student_id = student_id
+        self.borrow_date = borrow_date
+        self.return_date = return_date
+
+class Category(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    name = db.Column(db.String(100), unique = True, nullable = False)
+    
+    def __init__(self, name):
+        self.name = name
+
+class Author(db.Model):
+    id = db.Column(db.Integer, primary_key = True)
+    name = db.Column(db.String(100), unique = True, nullable = False)
+    
+    def __init__(self, name):
+        self.name = name
+
+3. add lệnh init_app vào __init__.py
+    db.init_app(app)
+3.1 Khởi tạo hàm database vào __init__.py
+def create_db(app):
+    #Tồn tại 1 đường dẫn database
+    if not os.path.exists("/library/library.db"):
+        db.create_all(app = app)
+        print("Created DB")
+
+3.2 Import thư viện
+from .extension import db
+from .model import Student, Books, Author, Category, Borrow
+
+3.3 Chạy hàm create_db(all) trong create_app
+
+IV: Thư viện MARSHMALLOW - Tạo ADD BOOK API
+1. Thay đổi 1 chút chỗ author_id và category_id tại model.py
+    author_id = db.Column(db.Integer, db.ForeignKey('author.id'))
+    category_id = db.Column(db.Integer, db.ForeignKey('author.id'))
+
+2. Vào extension.py thêm thư viện MARSHMALLOW
+from flask_marshmallow import Marshmallow
+ma = Marshmallow()
+
+2.1 Đến __init__.py thêm thư viện ma từ extension và bổ sung code cho hàm create_app
+ma = Marshmallow() dưới db
+
+3. Tạo thêm 1 file library_ma.py và code
+from .extension import ma
+
+class StudentSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name','birth_date', 'gender', 'class_name')
+    
+class BooksSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name','page_count', 'author_id', 'category_id')
+
+class BorrowSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'book_id','student_id', 'borrow_date', 'return_date')
+
+class CategorySchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name')
+
+class AuthorSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name')
+
+ 4. Vào service của book để code chức năng thêm vào csdl       
+ from library.extension import db
+from library.library_ma import BooksSchema
+from library.model import Books
+from flask import request
+import json
+
+#Lấy ra 1 quyển sách thì dùng book_schema
+book_schema = BooksSchema
+#Lấy ra nhiều quyển sách thì dùng books_schema
+books_schema = BooksSchema(many = True)
+
+#hàm add quyển sách 
+def add_book_service():
+    #Nhận request từ postman thêm hàm request
+    name = request.json['name']
+    page_count = request.json['page_count']
+    author_id = request.json['author_id']
+    category_id = request.json['category_id']
+    try:
+        new_book = Books(name, page_count, author_id, category_id)
+        db.session.add(new_book)
+        db.session.commmit()
+        return "Add success"
+    except:
+        db.session.rollback()
+        return "Can not add book"
+
+4.2. Sang bên controller của book thiết kế 1 route để gọi api add book
+from library.extension import db
+from library.library_ma import BooksSchema
+from library.model import Books
+from flask import request
+import json
+
+#Lấy ra 1 quyển sách thì dùng book_schema
+book_schema = BooksSchema
+#Lấy ra nhiều quyển sách thì dùng books_schema
+books_schema = BooksSchema(many = True)
+
+#hàm add quyển sách 
+def add_book_service():
+    #Nhận request từ postman thêm hàm request
+    name = request.json['name']
+    page_count = request.json['page_count']
+    author_id = request.json['author_id']
+    category_id = request.json['category_id']
+    try:
+        new_book = Books(name, page_count, author_id, category_id)
+        #print(new_book)
+        db.session.add(new_book)
+        # Ghi nhận sự thay đổi
+        db.session.commit()
+        return "Add success"
+    except IndentationError:
+        db.session.rollback()
+        print(IndentationError)
+        return "Can not add book"
+
+4,3 Vào controller của books thêm hàm add_book_service và thêm yêu cầu request POST
+@books.route("/book-management/book", methods = ['POST'])
+def add_book():
+    return add_book_service()
+
+V: Viết API GET, UPDATE, DELETE BOOK
+Công việc của backend là validate (xác nhận) cái request có chuẩn ko, nếu chuẩn mới add vào
+dữ liệu
+1. Vào Services của books khai báo 1 biến data
+1.1 Sửa lại 1 chút code để đảm bảo postman gửi đúng chuẩn json 
+def add_book_service():
+    data = request.json
+    #Nhận request từ postman thêm hàm request
+    if (data and 'name' in data) and ('page_count' in data) and ('author_id'in data) and ('category_id'in data):
+        name = data['name']
+        page_count = data['page_count']
+        author_id = data['author_id']
+        category_id = data['category_id']
+        try:
+            new_book = Books(name, page_count, author_id, category_id)
+            #print(new_book)
+            db.session.add(new_book)
+            # Ghi nhận sự thay đổi
+            db.session.commit()
+            return "Add success"
+        except IndentationError:
+            db.session.rollback()
+            print(IndentationError)
+            return "Can not add book"
+    else:
+        return "Request error"
+
+#Lấy ra 1 quyển sahcs
+def get_book_by_id_service(id):
+    book = Books.query.get(id)
+    if book:
+        #bookSchema sẽ mapping các trường của thằng book và các field của schema
+        return book_schema.jsonify(book)
+    else:
+        return "Not found book"
+
+2. Vào controller add hàm get_book_by_id_service thêm request GET book 
+#Get book by id
+from .services import add_book_service, get_book_by_id_service
+@books.route("/book-management/book/<int:id>", methods = ['GET'])
+def get_book(id):
+    return get_book_by_id_service(id)
+Chạy thử trong post man GET
+http://127.0.0.1:5000/book-management/book/1
+
+3. Lấy ra nhiều quyển sách
+#service.py
+#Lấy ra nhiều quyển sach
+def get_all_book_service():
+    books = Books.query.all()
+    if books:
+        #bookSchema sẽ mapping các trường của thằng book và các field của schema
+        return books_schema.jsonify(books)
+    else:
+        return "Not found book"
+
+#controller.py
+@books.route("/book-management/books", methods = ['GET'])
+def get_all_book():
+    return get_all_book_service()
+thêm function get_all_book_service
+Xóa @books.route("/get-all-books")
+def get_all_books():
+    return "All books"
+
+4. UPDATE
+#service
+=> Update sửa số trang, sẽ put request nhận về json và tiến hành update
+#Update 1 quyển sách, update số trang
+def update_book_by_id_service(id):
+    update_book = Books.query.get(id)
+    data = request.json
+    if update_book:
+        if data and "page_count" in data:
+        #bookSchema sẽ mapping các trường của thằng book và các field của schema
+            try:
+                update_book.page_count = data["page_count"]
+                db.session.commit()
+                return book_schema.jsonify(update_book)
+            except IndentationError:
+                db.session.rollback()
+                return "Can not update book!"
+    else:
+        return "Not found book"
+
+#controller
+#Update all book
+@books.route("/book-management/book/<int:id>", methods = ['PUT'])
+def update_book_by_id(id):
+    return update_book_by_id_service(id)
+
+5. DELETE
+#service
+def delete_book_by_id_service(id):
+    book = Books.query.get(id)
+    if book:
+        try:
+            db.session.delete(book)
+            db.session.commit()
+            return "Book deleted"
+        except IndentationError:
+            db.session.rollback()
+            #print(IndentationError)
+            return "Can not delete book!"
+        finally:
+            db.session.close()
+    else:
+        return "Not found book"
+
+#Delete all book
+@books.route("/book-management/book/<int:id>", methods = ['DELETE'])
+def delete_book_by_id(id):
+    return delete_book_by_id_service(id
+
+=> Tự code các class còn lại
+VI. Bổ sung thêm 2 API đặc biệt
+
+1. #Get book by author
+from library.model import Books, Author
+from sqlalchemy.sql import func
+def get_book_by_author_service(author):
+    books = Books.query.join(Author).filter(func.lower(Author.name))
+    if books:
+        return books_schema.jsonify(books)
+    else:
+        return jsonify({"message": f"Not found books by {author}"}), 404
+
+#controller 
+
+@books.route("/book-management/book/<string:author>", methods = ['GET'])
+def get_book_by_author(author):
+    return get_book_by_author_service(author)
+
+2. Borrow
+Thực hiện query lấy ra tất cả, học sinh mượn quyển sách nào sẽ hiển thị tên sách 
+và chủ đề của sách nên phải join lại khá nhiều bản
