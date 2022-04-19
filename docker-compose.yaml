@@ -1,0 +1,60 @@
+version: '3.5'
+
+services:
+  # backend:
+  #   container_name: be_api
+  #   image: python-docker/python:1
+  #   environment:
+  #     - DB_HOST=postgres
+  #     - DB_PORT=5432
+  #     - DB_NAME=nbhung
+  #     - DB_PASSWORD=Jecc74h3
+  #   ports:
+  #     - "5000:5000"
+  #   networks:
+  #     - postgres
+  #   depends_on:
+  #     - postgres
+  #   restart: always
+
+  postgres:
+    container_name: postgres_container
+    image: postgres
+    environment:
+      POSTGRES_USER: nbhung
+      POSTGRES_PASSWORD: Jecc74h3
+      PGDATA: /data/postgres
+    volumes:
+       - /postgres:/data/postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - postgres
+    restart: unless-stopped
+
+  pgadmin:
+    container_name: pgadmin_container
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+       - pgadmin:/root/.pgadmin
+    ports:
+      - "1080:80"
+    networks:
+      - postgres
+    restart: unless-stopped
+  
+
+  
+#NETWORK
+networks:
+  postgres:
+    driver: bridge
+
+#VOLUMES
+volumes:
+    postgres:
+    pgadmin:
