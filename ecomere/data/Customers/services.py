@@ -4,6 +4,7 @@ from ecomere.setting import conn
 from flask import request, jsonify
 from ecomere.library_ma import CustomersSchema
 import json
+from psycopg2.extras import DictCursor
 
 customer_schema = CustomersSchema()
 
@@ -60,17 +61,22 @@ def get_customer_service_by_id(id):
 def get__all_customer_service():
     try:
         data = []
-        cur = conn.cursor()
+        #cur = conn.cursor()
+        #cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        cur = conn.cursor(cursor_factory=DictCursor)
         cur.execute("SELECT * FROM customers")
         rows = cur.fetchall()
         #print(rows[0])
-        keys =  ["Customer Id", "Customer name", "Contact name", "Address", "City", "Postal Code", "Country"]
-        data = [{k: v for k, v in zip(keys, tup)} for tup in rows]
-        data_json =json.dumps(data, indent=6)
+        # keys =  ["Customer Id", "Customer name", "Contact name", "Address", "City", "Postal Code", "Country"]
+        # data = [{k: v for k, v in zip(keys, tup)} for tup in rows]
+        # data_json =json.dumps(data, indent=6)
+        for row in rows:
+            data.append(dict(row))
+        #data = json.dumps(data, indent=6)
         cur.close()
         #print(data_json)
         if rows:
-            return data_json
+            return jsonify(data)
         else:
             return "Not found customer"
         
@@ -97,7 +103,17 @@ def update_address_customer_by_id_service(id):
     finally:
         if conn is not None:
             conn.close()
-    
+
+def  delete_customer_by_id_service(id):
+    try: 
+        cur = conn.cursor()
+        cur.execute(f"DELETE FROM customers WHERE customerid = {id}")
+        conn.commit()
+        conn.close()
+        return "Delete customer success",200
+    except Exception as e:
+        return f"Delete fail, {e}"
+
 
 
     
